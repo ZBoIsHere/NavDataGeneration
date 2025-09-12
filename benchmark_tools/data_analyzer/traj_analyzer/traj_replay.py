@@ -1,4 +1,5 @@
 import argparse
+from fileinput import filename
 from turtle import position
 
 from matplotlib import category
@@ -51,6 +52,36 @@ def make_metrics(info, episode):
     del ep_json['_shortest_path_cache']
     return ep_json
 
+def check_traj_format(episode):
+    # replay all episode.get('') to episode.
+    filename = episode.scene_id
+    replay = episode.reference_replay
+    episode_id = episode.episode_id
+    if replay:
+        first_action = replay[0].get('action')
+        last_action = replay[-1].get('action')
+        # 如果首尾的action不是'STOP'，打印警告
+        if first_action != 'STOP':
+            print(f"Warning: {filename} - Episode {episode_id} first action is not STOP, it is {first_action}")
+        if last_action != 'STOP':
+            print(f"Warning: {filename} - Episode {episode_id} last action is not STOP, it is {last_action}")
+        # 遍历所有的replay，如果action不在['MOVE_FORWARD', 'TURN_LEFT', 'TURN_RIGHT', 'LOOK_UP', 'LOOK_DOWN']，打印警告
+        angle = 0
+        for step in replay[1:-1]:  # 排除首尾的STOP
+            action = step.get('action')
+            if action not in ['MOVE_FORWARD', 'TURN_LEFT', 'TURN_RIGHT', 'LOOK_UP', 'LOOK_DOWN']:
+                print(f"Warning: {filename} - Episode {episode.get('episode_id')} has invalid action {action}")
+            if action in ['LOOK_UP', 'LOOK_DOWN']:
+                if action == 'LOOK_UP':
+                    angle += 1
+                else:
+                    angle -= 1
+                #print(f"Warning: {filename} - Episode {episode.get('episode_id')} has LOOK_UP or LOOK_DOWN action.")
+
+        if angle != 0:
+            print(f"Warning: {filename} - Episode {episode_id} has unbalanced LOOK_UP/LOOK_DOWN actions, net angle change: {angle}")
+    else:
+        print(f"{filename} - Episode {episode.get('episode_id')}: No reference_replay found.")
 
 def run_reference_replay(
     args, cfg, scene_name=None
@@ -78,6 +109,7 @@ def run_reference_replay(
                 continue
 
             env.reset()
+            check_traj_format(env.current_episode)
             observation_list = []
 
             episode = env.current_episode
@@ -143,7 +175,7 @@ import sys
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--scene_name", type=str, default='vLpv2VX547B', help="like 1S7LAXRdDqK"
+        "--scene_name", type=str, default='ACZZiU6BXLz', help="like 1S7LAXRdDqK"
     )
     #parser.add_argument(
     #    "--episode_start", type=int, default=0, help="the start index of the episodes"
@@ -155,10 +187,10 @@ def main():
         "--episode_step", type=int, default=100, help="the step of the episodes, like 2 means every two episodes"
     )
     parser.add_argument(
-        "--scene_type", type=str, default='hm3d_v2', help="hm3d_v1 or hm3d_v2"
+        "--scene_type", type=str, default='hm3d_v1', help="hm3d_v1 or hm3d_v2"
     )
     parser.add_argument(
-        "--traj_path", type=str, default="data/task_datasets/objectnav/hm3d_v2/train/content"
+        "--traj_path", type=str, default="data/traj_datasets/objectnav/hm3d_v1_hd/train/content"
     )
 
     args = parser.parse_args()

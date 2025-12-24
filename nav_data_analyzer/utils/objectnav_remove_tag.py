@@ -1,14 +1,4 @@
-## PYTHON 
-## ******************************************************************** ##
-## author: CTO_TI_FBSYJG
-## create time: 2025/09/23 12:03:01 GMT+08:00
-## ******************************************************************** ##
-import os
-import re
 import sys
-import gzip
-import json
-import uuid
 import argparse
 
 from numpy import integer, short
@@ -108,7 +98,7 @@ if __name__ == "__main__":
 
     # database connection parameters
     parser.add_argument("--db_user", default='dbadmin', help="数据库用户名")
-    parser.add_argument("--db_password", default='dataplatform@123', help="数据库密码")
+    parser.add_argument("--db_password", default='xxx', help="数据库密码")
     parser.add_argument("--db_host", default="dws-z00562901.dws.myhuaweiclouds.com", help="数据库主机")
     parser.add_argument("--db_port", default="8000", help="数据库端口")
     parser.add_argument("--db_name", default='postgres' , help="数据库名称")

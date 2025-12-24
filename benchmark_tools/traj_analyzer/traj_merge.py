@@ -1,8 +1,4 @@
-
-
 from posixpath import dirname
-
-import scipy as sp
 
 
 def main():
@@ -13,34 +9,18 @@ def main():
     )
     parser.add_argument(
         "--split_traj_path",
-        default='/app/data/z00562901/NavDataGeneration/data/traj_datasets/objectnav/hm3d_v1_hd',
+        default='/root/NavDataGeneration/data/traj_datasets/objectnav/cloudrobo_v1_l3mvn_all/train/content_split',
         help="Path to the directory containing split trajectory files.",
     )
     parser.add_argument(
         "--merged_traj_path",
-        default='/app/data/z00562901/NavDataGeneration/data/traj_datasets/objectnav/hm3d_v1_hd/train/content/',
+        default='/root/content',
         help="Path to save the merged trajectory file.",
     )
-    # split length
     parser.add_argument(
-        "--split_length",
-        type=int,
-        default=100,
-        help="Number of trajectories per split file.",
-    )
-    # start_episode_id
-    parser.add_argument(
-        "--start_episode_id",
-        type=int,
-        default=0,
-        help="Starting episode ID for naming the merged file.",
-    )
-    # end_episode_id
-    parser.add_argument(
-        "--end_episode_id",
-        type=int,
-        default=1199,
-        help="Ending episode ID for naming the merged file.",
+        "--task_path",
+        default='data/task_datasets/objectnav/cloudrobo_v1/train/content',
+        help="task datasets path, conculde scene names from here.",
     )
 
 
@@ -59,16 +39,21 @@ def main():
 
     # 所有的场景名称在一个.txt文件中，每行一个场景名称
     scene_names = []
-    with open('/app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/hm3d_sem_v1_train_scenes.txt', 'r') as f:
-        for line in f:
-            scene_name = line.strip()
-            scene_names.append(scene_name)
+    ok_scene_names = []
+    for _, _, filenames in os.walk(args.task_path):
+        for filename in filenames:
+            if filename.endswith('.json.gz'):
+                scene_name = filename.replace('.json.gz', '')
+                scene_names.append(scene_name)
+    for _, _, filenames in os.walk(args.merged_traj_path):
+        for filename in filenames:
+            if filename.endswith('.json.gz'):
+                scene_name = filename.replace('.json.gz', '')
+                if scene_name not in ok_scene_names:
+                    ok_scene_names.append(scene_name)
+    scene_names = [name for name in scene_names if name not in ok_scene_names]
     print(f'scene_names: {scene_names}')
     print(f'Number of scenes: {len(scene_names)}')
-
-    # 依次遍历scene_names, 然后把split_dir_name中场景名称相同的*.json.gz文件合并，其中合并的内容是json_data['episodes']的列表，其他json_data的字段，每个场景都一样，使用第一个文件的即可
-    # 如果某个场景的文件在某个split_dir_names中不存在，则跳过该文件
-    # 要求逐个对每个场景进行合并，而不是等到所有文件都读完再进行合并
 
     import gzip
     import json
@@ -84,6 +69,7 @@ def main():
             'goals_by_category': {},    
         }
         for split_dir_name in split_dir_names:
+            print(f"Processing scene {scene_name} in dir {split_dir_name}...")
             split_dir_path = os.path.join(args.split_traj_path, split_dir_name)
             filename = f"{scene_name}.json.gz"
             filepath = os.path.join(split_dir_path, filename)
@@ -109,18 +95,20 @@ def main():
         os.makedirs(dirname(merged_filepath), exist_ok=True)
         scene_episode_num = len(merged_traj_data['episodes'])
         print(f"Scene {scene_name} has {scene_episode_num} episodes after merging.")
+        json_str = json.dumps(merged_traj_data)
         with gzip.open(merged_filepath, 'wt', encoding='utf-8') as f:
-            json.dump(merged_traj_data, f)
+            f.write(json_str)
+
         
         return scene_episode_num
     
-    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
-        results = list(executor.map(process_scene, scene_names))
-        total_episodes = sum(results)
+    #with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+    #    results = list(executor.map(process_scene, scene_names))
+    #    total_episodes = sum(results)
+    for scene_name in scene_names:
+        total_episodes += process_scene(scene_name)
 
     print(f"Total episodes merged: {total_episodes}")
-
-
 
 
 if __name__ == "__main__":

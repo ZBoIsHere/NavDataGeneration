@@ -1,10 +1,11 @@
+import matplotlib.pyplot as plt
+import gzip
 from collections import deque, defaultdict
 from itertools import count
 import os
 import logging
 import time
 import json
-import gym
 import torch.nn as nn
 import torch
 import torch.optim as optim
@@ -37,7 +38,6 @@ from model import Semantic_Mapping, FeedforwardNet
 from envs.utils.fmm_planner import FMMPlanner
 from envs import make_vec_envs
 from arguments import get_args
-import algo
 
 from constants import category_to_id, hm3d_category, category_to_id_gibson
 
@@ -51,9 +51,9 @@ fileName = 'data/matterport_category_mappings.tsv'
 text = ''
 lines = []
 items = []
-hm3d_semantic_mapping={}
-hm3d_semantic_index={}
-hm3d_semantic_index_inv={}
+hm3d_semantic_mapping = {}
+hm3d_semantic_index = {}
+hm3d_semantic_index_inv = {}
 
 with open(fileName, 'r') as f:
     text = f.read()
@@ -70,8 +70,9 @@ for i in items:
 
 
 def find_big_connect(image):
-    img_label, num = measure.label(image, connectivity=2, return_num=True)#输出二值图像中所有的连通域
-    props = measure.regionprops(img_label)#输出连通域的属性，包括面积等
+    img_label, num = measure.label(
+        image, connectivity=2, return_num=True)  # 输出二值图像中所有的连通域
+    props = measure.regionprops(img_label)  # 输出连通域的属性，包括面积等
     # print("img_label.shape: ", img_label.shape) # 480*480
     resMatrix = np.zeros(img_label.shape)
     tmp_area = 0
@@ -79,13 +80,50 @@ def find_big_connect(image):
         if props[i].area > tmp_area:
             tmp = (img_label == i + 1).astype(np.uint8)
             resMatrix = tmp
-            tmp_area = props[i].area 
-    
+            tmp_area = props[i].area
+
     return resMatrix
-    
+
+
+action_map = {0: 'STOP', 1: 'MOVE_FORWARD', 2: 'TURN_LEFT',
+              3: 'TURN_RIGHT', 4: 'LOOK_UP', 5: 'LOOK_DOWN'}
+
+
+def write_json(data, path):
+    with open(path, 'w') as file:
+        file.write(json.dumps(data, indent=4))
+
+
+def write_gzip(input_path, output_path):
+    with open(input_path, "rb") as input_file:
+        with gzip.open(output_path + ".gz", "wb") as output_file:
+            output_file.writelines(input_file)
+
+
+def load_dataset(path):
+    with gzip.open(path, "rb") as file:
+        data = json.loads(file.read(), encoding="utf-8")
+    return data
+
+
+def load_json_dataset(path):
+    file = open(path, "r")
+    data = json.loads(file.read())
+    return data
+
+
+def create_dir(dirname):
+    if not os.path.exists(dirname):
+        os.makedirs(dirname, exist_ok=True)
+    return dirname
+
 
 def main():
     args = get_args()
+    if args.num_processes == 0:
+        # no scene to run
+        print("No scene to run")
+        return
 
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -163,7 +201,7 @@ def main():
 
     # Calculating full and local map sizes
     map_size = args.map_size_cm // args.map_resolution
-    full_w, full_h = map_size, map_size # 2400/5=480
+    full_w, full_h = map_size, map_size  # 2400/5=480
     local_w = int(full_w / args.global_downscaling)
     local_h = int(full_h / args.global_downscaling)
 
@@ -179,14 +217,13 @@ def main():
                             local_h))
 
     target_edge_map = np.zeros((num_scenes, local_w,
-                            local_h))
+                                local_h))
     target_point_map = np.zeros((num_scenes, local_w,
-                            local_h))
-
+                                 local_h))
 
     # dialate for target map
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(3, 3))
-    tv_kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(7, 7))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    tv_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
 
     # Initial full and local pose
     full_pose = torch.zeros(num_scenes, 3).float().to(device)
@@ -207,8 +244,8 @@ def main():
     for _ in range(args.num_processes):
         frontier_score_list.append(deque(maxlen=10))
 
-    
-    object_norm_inv_perplexity = torch.tensor(np.load('data/object_norm_inv_perplexity.npy')).to(device)
+    object_norm_inv_perplexity = torch.tensor(
+        np.load('data/object_norm_inv_perplexity.npy')).to(device)
 
     def get_local_map_boundaries(agent_loc, local_sizes, full_sizes):
         loc_r, loc_c = agent_loc
@@ -248,7 +285,7 @@ def main():
             gy1, gy2 = 0, local_h
         if gy2 > full_h:
             gy1, gy2 = full_h - local_h, full_h
- 
+
         return [int(gx1), int(gx2), int(gy1), int(gy2)]
 
     def init_map_and_pose():
@@ -283,19 +320,18 @@ def main():
     def init_map_and_pose_for_env(e):
         full_map[e].fill_(0.)
         full_pose[e].fill_(0.)
-        local_ob_map[e]=np.zeros((local_w,
-                            local_h))
-        local_ex_map[e]=np.zeros((local_w,
-                            local_h))
-        target_edge_map[e]=np.zeros((local_w,
-                            local_h))
-        target_point_map[e]=np.zeros((local_w,
-                            local_h))
+        local_ob_map[e] = np.zeros((local_w,
+                                    local_h))
+        local_ex_map[e] = np.zeros((local_w,
+                                    local_h))
+        target_edge_map[e] = np.zeros((local_w,
+                                       local_h))
+        target_point_map[e] = np.zeros((local_w,
+                                        local_h))
 
-        step_masks[e]=0
+        step_masks[e] = 0
         stair_flag[e] = 0
         clear_flag[e] = 0
-
 
         full_pose[e, :2] = args.map_size_cm / 100.0 / 2.0
 
@@ -321,7 +357,6 @@ def main():
 
     init_map_and_pose()
 
-
     def remove_small_points(local_ob_map, image, threshold_point, pose):
         # print("goal_cat_id: ", goal_cat_id)
         # print("sem: ", sem.shape)
@@ -331,16 +366,19 @@ def main():
         # traversible = 1 - traversible
         planner = FMMPlanner(traversible)
         goal_pose_map = np.zeros((local_ob_map.shape))
-        pose_x = int(pose[0].cpu()) if int(pose[0].cpu()) < local_w-1 else local_w-1
-        pose_y = int(pose[1].cpu()) if int(pose[1].cpu()) < local_w-1 else local_w-1
+        pose_x = int(pose[0].cpu()) if int(
+            pose[0].cpu()) < local_w-1 else local_w-1
+        pose_y = int(pose[1].cpu()) if int(
+            pose[1].cpu()) < local_w-1 else local_w-1
         goal_pose_map[pose_x, pose_y] = 1
         # goal_map = skimage.morphology.binary_dilation(
         #     goal_pose_map, selem) != True
         # goal_map = 1 - goal_map
         planner.set_multi_goal(goal_pose_map)
 
-        img_label, num = measure.label(image, connectivity=2, return_num=True)#输出二值图像中所有的连通域
-        props = measure.regionprops(img_label)#输出连通域的属性，包括面积等
+        img_label, num = measure.label(
+            image, connectivity=2, return_num=True)  # 输出二值图像中所有的连通域
+        props = measure.regionprops(img_label)  # 输出连通域的属性，包括面积等
         # print("img_label.shape: ", img_label.shape) # 480*480
         # print("img_label.dtype: ", img_label.dtype) # 480*480
         Goal_edge = np.zeros((img_label.shape[0], img_label.shape[1]))
@@ -351,29 +389,30 @@ def main():
         for i in range(1, len(props)):
             # print("area: ", props[i].area)
             # dist = pu.get_l2_distance(props[i].centroid[0], pose[0], props[i].centroid[1], pose[1])
-            dist = planner.fmm_dist[int(props[i].centroid[0]), int(props[i].centroid[1])] * 5
+            dist = planner.fmm_dist[int(props[i].centroid[0]), int(
+                props[i].centroid[1])] * 5
             dist_s = 8 if dist < 300 else 0
-            
+
             cost = props[i].area + dist_s
 
             if props[i].area > threshold_point and dist > 50 and dist < 500:
                 dict_cost[i] = cost
-        
+
         if dict_cost:
-            dict_cost = sorted(dict_cost.items(), key=lambda x: x[1], reverse=True)
-            
+            dict_cost = sorted(dict_cost.items(),
+                               key=lambda x: x[1], reverse=True)
+
             # print(dict_cost)
             for i, (key, value) in enumerate(dict_cost):
                 # print(i, key)
                 Goal_edge[img_label == key + 1] = 1
-                Goal_point[int(props[key].centroid[0]), int(props[key].centroid[1])] = i+1 #
+                Goal_point[int(props[key].centroid[0]),
+                           int(props[key].centroid[1])] = i+1
                 Goal_score.append(value)
                 if i == 3:
                     break
 
         return Goal_edge, Goal_point, Goal_score
-
-  
 
     def configure_lm(lm):
         """
@@ -429,7 +468,6 @@ def main():
 
         lm_model.eval()
         lm_model = lm_model.to(device)
-
 
         """
         Returns a function that embeds sentences with the selected
@@ -497,13 +535,11 @@ def main():
         query_str += "."
         return query_str
 
-
-
     # Semantic Mapping
     sem_map_module = Semantic_Mapping(args).to(device)
     sem_map_module.eval()
 
-    ### LLM 
+    # LLM
     embedder = configure_lm("RoBERTa-large")
 
     output_size = len(category_to_id)
@@ -534,7 +570,6 @@ def main():
 
     local_map[:, 0, :, :][local_map[:, 13, :, :] > 0] = 0
 
-
     actions = torch.randn(num_scenes, 2)*6
     # print("actions: ", actions.shape)
     cpu_actions = nn.Sigmoid()(actions).cpu().numpy()
@@ -564,7 +599,72 @@ def main():
             p_input['sem_map_pred'] = local_map[e, 4:, :, :
                                                 ].argmax(0).cpu().numpy()
 
+    datasets = []
+    reference_replay = {}
+    episodes_done = {}
+    for e in range(num_scenes):
+        datasets.append({})
+        reference_replay[e] = []
+        datasets[e]['episodes'] = []
+
+    def get_action_data(infos, e):
+        action_data = {}
+        action_data["action"] = action_map[infos[e]['action_id']]
+        action_data["agent_state"] = get_agent_state(infos, e)
+        return action_data
+
+    def get_agent_state(infos, e):
+        agent_state = {}
+        agent_state['position'] = np.array(
+            infos[e]['agent_state'].position).tolist()
+        agent_rotation = infos[e]['agent_state'].rotation
+        agent_state['rotation'] = [agent_rotation.x,
+                                   agent_rotation.y, agent_rotation.z, agent_rotation.w]
+
+        return agent_state
+
+    def collect_demonstration(args, obs, fail_case, done, infos):
+        for scene_id in range(num_scenes):
+            episode_id = infos[scene_id]['current_episode'].episode_id
+
+            uid = str(scene_id) + '-' + episode_id
+
+            if not (wait_env[scene_id] or finished[scene_id]):
+                action_data = get_action_data(infos, scene_id)
+                reference_replay[scene_id].append(action_data)
+
+            # if done[e] == True and infos[e]['success'] == 1:
+            if done[scene_id] == True:
+                if infos[scene_id]['success'] == 1:
+                    if uid not in episodes_done:
+                        episode = infos[scene_id]['current_episode']
+                        import attr
+                        ep_json = attr.asdict(episode)
+                        del ep_json["_shortest_path_cache"]
+                        ep_json['reference_replay'] = reference_replay[scene_id]
+                        if int(episode_id) >= args.start_episode_id:
+                            datasets[scene_id]['episodes'].append(ep_json)
+                        episodes_done[uid] = str(
+                            len(reference_replay[scene_id])) + ' success'
+                        print(
+                            f'{uid} done success-----------------------with {len(reference_replay[scene_id])} step')
+                        reference_replay[scene_id] = []
+                else:
+                    episodes_done[uid] = str(
+                        len(reference_replay[scene_id])) + ' fail'
+                    print(
+                        f'{uid} done fail-----------------------with {len(reference_replay[scene_id])} step')
+                    reference_replay[scene_id] = []
+
+    import attr
     obs, _, done, infos = envs.plan_act_and_preprocess(planner_inputs)
+    collect_demonstration(args, obs, _, done, infos)
+    for scene_id in range(num_scenes):
+        dataset_json = infos[scene_id]['dataset'].to_json()
+        dataset = json.loads(dataset_json)
+        datasets[scene_id]['category_to_task_category_id'] = dataset['category_to_task_category_id']
+        datasets[scene_id]['category_to_scene_annotation_category_id'] = dataset['category_to_scene_annotation_category_id']
+        datasets[scene_id]['goals_by_category'] = dataset['goals_by_category']
 
     start = time.time()
     g_reward = 0
@@ -574,6 +674,7 @@ def main():
     success_per_category = defaultdict(list)
 
     for step in range(args.num_training_frames // args.num_processes + 1):
+        start_step = time.time()
         if finished.sum() == args.num_processes:
             break
 
@@ -599,7 +700,7 @@ def main():
                     episode_dist[e].append(dist)
                     if len(episode_success[e]) == num_episodes:
                         finished[e] = 1
-   
+
                 wait_env[e] = 1.
                 init_map_and_pose_for_env(e)
         # ------------------------------------------------------------------
@@ -615,10 +716,9 @@ def main():
             [infos[env_idx]['eve_angle'] for env_idx
              in range(num_scenes)])
         
-
+        
         increase_local_map, local_map, local_map_stair, local_pose = \
             sem_map_module(obs, poses, local_map, local_pose, eve_angle)
-
 
         locs = local_pose.cpu().numpy()
         planner_pose_inputs[:, :3] = locs + origins
@@ -632,9 +732,11 @@ def main():
             # work for stairs in val
             # ------------------------------------------------------------------
             if args.eval:
-            # # clear the obstacle during the stairs
-                if loc_r > local_w: loc_r = local_w-1
-                if loc_c > local_h: loc_c = local_h-1
+                # # clear the obstacle during the stairs
+                if loc_r >= local_w:
+                    loc_r = local_w-1
+                if loc_c >= local_h:
+                    loc_c = local_h-1
                 if infos[e]['clear_flag'] or local_map[e, 18, loc_r, loc_c] > 0.5:
                     stair_flag[e] = 1
 
@@ -645,7 +747,6 @@ def main():
                     local_map[e, 0, :, :] = local_map_stair[e, 0, :, :]
             # ------------------------------------------------------------------
 
-
         # ------------------------------------------------------------------
 
         # ------------------------------------------------------------------
@@ -654,12 +755,11 @@ def main():
             # For every global step, update the full and local maps
             for e in range(num_scenes):
 
-                step_masks[e]+=1
+                step_masks[e] += 1
 
                 if wait_env[e] == 1:  # New episode
                     wait_env[e] = 0.
 
-                
                 full_map[e, :, lmb[e, 0]:lmb[e, 1], lmb[e, 2]:lmb[e, 3]] = \
                     local_map[e]
                 full_pose[e] = local_pose[e] + \
@@ -671,12 +771,12 @@ def main():
                                 int(c * 100.0 / args.map_resolution)]
 
                 lmb[e] = get_local_map_boundaries((loc_r, loc_c),
-                                                (local_w, local_h),
-                                                (full_w, full_h))
+                                                  (local_w, local_h),
+                                                  (full_w, full_h))
 
                 planner_pose_inputs[e, 3:] = lmb[e]
                 origins[e] = [lmb[e][2] * args.map_resolution / 100.0,
-                            lmb[e][0] * args.map_resolution / 100.0, 0.]
+                              lmb[e][0] * args.map_resolution / 100.0, 0.]
 
                 local_map[e] = full_map[e, :,
                                         lmb[e, 0]:lmb[e, 1],
@@ -692,8 +792,8 @@ def main():
                     clear_flag[e] = 0
 
             # ------------------------------------------------------------------
-          
-            ### select the frontier edge            
+
+            # select the frontier edge
             # ------------------------------------------------------------------
             # Edge Update
             for e in range(num_scenes):
@@ -703,127 +803,129 @@ def main():
                 _local_ob_map = local_map[e][0].cpu().numpy()
                 local_ob_map[e] = cv2.dilate(_local_ob_map, kernel)
 
-                show_ex = cv2.inRange(local_map[e][1].cpu().numpy(),0.1,1)
-                
+                show_ex = cv2.inRange(local_map[e][1].cpu().numpy(), 0.1, 1)
+
                 kernel = np.ones((5, 5), dtype=np.uint8)
                 free_map = cv2.morphologyEx(show_ex, cv2.MORPH_CLOSE, kernel)
 
-                contours,_=cv2.findContours(free_map, cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)
-                if len(contours)>0:
-                    contour = max(contours, key = cv2.contourArea)
-                    cv2.drawContours(local_ex_map[e],contour,-1,1,1)
+                contours, _ = cv2.findContours(
+                    free_map, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+                if len(contours) > 0:
+                    contour = max(contours, key=cv2.contourArea)
+                    cv2.drawContours(local_ex_map[e], contour, -1, 1, 1)
 
                 # clear the boundary
-                local_ex_map[e, 0:2, 0:local_w]=0.0
-                local_ex_map[e, local_w-2:local_w, 0:local_w-1]=0.0
-                local_ex_map[e, 0:local_w, 0:2]=0.0
-                local_ex_map[e, 0:local_w, local_w-2:local_w]=0.0
-                
+                local_ex_map[e, 0:2, 0:local_w] = 0.0
+                local_ex_map[e, local_w-2:local_w, 0:local_w-1] = 0.0
+                local_ex_map[e, 0:local_w, 0:2] = 0.0
+                local_ex_map[e, 0:local_w, local_w-2:local_w] = 0.0
+
                 target_edge = np.zeros((local_w, local_h))
                 target_edge = local_ex_map[e]-local_ob_map[e]
 
-                target_edge[target_edge>0.8]=1.0
-                target_edge[target_edge!=1.0]=0.0
+                target_edge[target_edge > 0.8] = 1.0
+                target_edge[target_edge != 1.0] = 0.0
 
-                local_pose_map = [local_pose[e][1]*100/args.map_resolution, local_pose[e][0]*100/args.map_resolution]
-                target_edge_map[e], target_point_map[e], Goal_score = remove_small_points(_local_ob_map, target_edge, 4, local_pose_map) 
-  
+                local_pose_map = [
+                    local_pose[e][1]*100/args.map_resolution, local_pose[e][0]*100/args.map_resolution]
+                target_edge_map[e], target_point_map[e], Goal_score = remove_small_points(
+                    _local_ob_map, target_edge, 4, local_pose_map)
 
-
-                local_ob_map[e]=np.zeros((local_w,
-                        local_h))
-                local_ex_map[e]=np.zeros((local_w,
-                        local_h))
+                local_ob_map[e] = np.zeros((local_w,
+                                            local_h))
+                local_ex_map[e] = np.zeros((local_w,
+                                            local_h))
 
                 # ------------------------------------------------------------------
 
-                ##### LLM frontier score
+                # LLM frontier score
                 # ------------------------------------------------------------------
 
                 cn = infos[e]['goal_cat_id'] + 4
-                cname = infos[e]['goal_name'] 
+                cname = infos[e]['goal_name']
                 frontier_score_list[e] = []
-                tpm = len(list(set(target_point_map[e].ravel()))) -1
-                
+                tpm = len(list(set(target_point_map[e].ravel()))) - 1
+
                 for lay in range(tpm):
                     f_pos = np.argwhere(target_point_map[e] == lay+1)
                     fmb = get_frontier_boundaries((f_pos[0][0], f_pos[0][1]),
-                                                    (local_w/4, local_h/4),
-                                                    (local_w, local_h))
+                                                  (local_w/4, local_h/4),
+                                                  (local_w, local_h))
                     objs_list = []
                     for se_cn in range(args.num_sem_categories-1):
                         if local_map[e][se_cn+4, fmb[0]:fmb[1], fmb[2]:fmb[3]].sum() != 0.:
                             objs_list.append(hm3d_category[se_cn])
 
-                    if len(objs_list)>0:
+                    if len(objs_list) > 0:
 
-                        objs_p = [hm3d_semantic_index[obj] for obj in objs_list]
+                        objs_p = [hm3d_semantic_index[obj]
+                                  for obj in objs_list]
                         objs_p = torch.tensor(objs_p)
                         y_object = F.one_hot(objs_p, 42).type(torch.LongTensor)
                         # np_objs = objs
                         y_object = y_object.to(device)
 
                         scores = y_object * object_norm_inv_perplexity.reshape(
-                                [1, -1])
+                            [1, -1])
 
                         maxes = torch.max(scores, dim=1).values
                         top_max_inds = torch.topk(maxes, max(min((maxes > 0).sum(), 3),
-                                                                1)).indices
+                                                             1)).indices
                         objs = torch.argmax(scores[top_max_inds], dim=1)
                         objs = torch.where(
                             torch.bincount(objs, minlength=len(objs)) > 0)[0]
                         # for objs_p in multiset_permutations(np_objs, k_room):
                         objs = objs.cpu().numpy()
                         objs_n = [hm3d_semantic_index_inv[obj] for obj in objs]
-                       
+
                         query_str = _object_query_constructor(objs_n)
                         # query_str = torch.tensor(query_str)
                         query_embedding = embedder(query_str)
                         pred = ff_net(query_embedding)
                         pred = nn.Softmax(dim=1)(pred)
-               
-                        frontier_score_list[e].append(pred[0][hm3d_category.index(cname)].cpu().numpy()) 
-                      
-                    else:
-                        frontier_score_list[e].append(Goal_score[lay]/max(Goal_score) * 0.1 + 0.1) 
 
+                        frontier_score_list[e].append(
+                            pred[0][hm3d_category.index(cname)].cpu().numpy())
+
+                    else:
+                        frontier_score_list[e].append(
+                            Goal_score[lay]/max(Goal_score) * 0.1 + 0.1)
 
             # ------------------------------------------------------------------
 
-            ##### select randomly point
+            # select randomly point
             # ------------------------------------------------------------------
             actions = torch.randn(num_scenes, 2)*6
             cpu_actions = nn.Sigmoid()(actions).numpy()
             global_goals = [[int(action[0] * local_w),
-                                int(action[1] * local_h)]
+                             int(action[1] * local_h)]
                             for action in cpu_actions]
             global_goals = [[min(x, int(local_w - 1)),
-                                min(y, int(local_h - 1))]
+                             min(y, int(local_h - 1))]
                             for x, y in global_goals]
 
             g_masks = torch.ones(num_scenes).float().to(device)
 
             # --------------------------------------------------------------------
 
-
         # ------------------------------------------------------------------
         # Update long-term goal if target object is found
         found_goal = [0 for _ in range(num_scenes)]
-    
-        local_goal_maps = [np.zeros((local_w, local_h)) for _ in range(num_scenes)]
-        
 
+        local_goal_maps = [np.zeros((local_w, local_h))
+                           for _ in range(num_scenes)]
 
         for e in range(num_scenes):
 
             # ------------------------------------------------------------------
-            ##### select frontier point
+            # select frontier point
             # ------------------------------------------------------------------
             global_item = 0
             if len(frontier_score_list[e]) > 0:
                 if max(frontier_score_list[e]) > 0.2:
-                    global_item = frontier_score_list[e].index(max(frontier_score_list[e]))
-                
+                    global_item = frontier_score_list[e].index(
+                        max(frontier_score_list[e]))
+
                 # elif max(frontier_score_list[e]) > 0.1:
                 #     for f_score in frontier_score_list[e]:
                 #         if f_score > 0.1:
@@ -832,10 +934,10 @@ def main():
                 #             global_item += 1
                 # else:
                 #     global_item = 0
-                #------------------------------------------------------------------
+                # ------------------------------------------------------------------
 
-                ###### Get llm frontier reward
-                
+                # Get llm frontier reward
+
                 # ------------------------------------------------------------------
                 if max(frontier_score_list[e]) > 0.1:
                     if args.task_config == "tasks/objectnav_gibson.yaml":
@@ -843,7 +945,6 @@ def main():
                         g_process_rewards += g_reward
                     g_sum_rewards += 1
                     # print("get llm result!")
-
 
             if np.any(target_point_map[e] == global_item+1):
                 local_goal_maps[e][target_point_map[e] == global_item+1] = 1
@@ -861,7 +962,8 @@ def main():
                 cat_semantic_scores = cat_semantic_map
                 cat_semantic_scores[cat_semantic_scores > 0] = 1.
                 if cn == 9:
-                    cat_semantic_scores = cv2.dilate(cat_semantic_scores, tv_kernel)
+                    cat_semantic_scores = cv2.dilate(
+                        cat_semantic_scores, tv_kernel)
                 local_goal_maps[e] = find_big_connect(cat_semantic_scores)
                 found_goal[e] = 1
 
@@ -887,7 +989,9 @@ def main():
                                                 :].argmax(0).cpu().numpy()
    
 
-        obs, fail_case, done, infos = envs.plan_act_and_preprocess(planner_inputs)
+        obs, fail_case, done, infos = envs.plan_act_and_preprocess(
+            planner_inputs)
+        collect_demonstration(args, obs, fail_case, done, infos)
         # ------------------------------------------------------------------
 
         # ------------------------------------------------------------------
@@ -895,115 +999,122 @@ def main():
         # ------------------------------------------------------------------
 
         # ------------------------------------------------------------------
+        end_step = time.time()
+        # 每个step耗时
+        print("Each step time: {:.3f}s".format(end_step - start_step))
 
-        if step % args.log_interval == 0:
-            end = time.time()
-            time_elapsed = time.gmtime(end - start)
-            log = " ".join([
-                "Time: {0:0=2d}d".format(time_elapsed.tm_mday - 1),
-                "{},".format(time.strftime("%Hh %Mm %Ss", time_elapsed)),
-                "num timesteps {},".format(step * num_scenes),
-                "FPS {},".format(int(step * num_scenes / (end - start)))
-            ])
+        #if step % args.log_interval == 0:
+        #    end = time.time()
+        #    time_elapsed = time.gmtime(end - start)
+        #    log = " ".join([
+        #        "Time: {0:0=2d}d".format(time_elapsed.tm_mday - 1),
+        #        "{},".format(time.strftime("%Hh %Mm %Ss", time_elapsed)),
+        #        "num timesteps {},".format(step * num_scenes),
+        #        "FPS {},".format(int(step * num_scenes / (end - start)))
+        #    ])
 
-            log += "\n\tLLM Rewards: " + str(g_process_rewards /g_sum_rewards)
-            log += "\n\tLLM use rate: " + str(g_sum_rewards /g_sum_global)
+        #    log += "\n\tLLM Rewards: " + str(g_process_rewards / g_sum_rewards)
+        #    log += "\n\tLLM use rate: " + str(g_sum_rewards / g_sum_global)
 
-            if args.eval:
-                total_success = []
-                total_spl = []
-                total_dist = []
-                for e in range(args.num_processes):
-                    for acc in episode_success[e]:
-                        total_success.append(acc)
-                    for dist in episode_dist[e]:
-                        total_dist.append(dist)
-                    for spl in episode_spl[e]:
-                        total_spl.append(spl)
+        #    if args.eval:
+        #        total_success = []
+        #        total_spl = []
+        #        total_dist = []
+        #        for e in range(args.num_processes):
+        #            for acc in episode_success[e]:
+        #                total_success.append(acc)
+        #            for dist in episode_dist[e]:
+        #                total_dist.append(dist)
+        #            for spl in episode_spl[e]:
+        #                total_spl.append(spl)
 
-                if len(total_spl) > 0:
-                    log += " ObjectNav succ/spl/dtg:"
-                    log += " {:.3f}/{:.3f}/{:.3f}({:.0f}),".format(
-                        np.mean(total_success),
-                        np.mean(total_spl),
-                        np.mean(total_dist),
-                        len(total_spl))
+        #        if len(total_spl) > 0:
+        #            log += " ObjectNav succ/spl/dtg:"
+        #            log += " {:.3f}/{:.3f}/{:.3f}({:.0f}),".format(
+        #                np.mean(total_success),
+        #                np.mean(total_spl),
+        #                np.mean(total_dist),
+        #                len(total_spl))
 
-                total_collision = []
-                total_exploration = []
-                total_detection = []
-                total_success = []
-                for e in range(args.num_processes):
-                    total_collision.append(fail_case[e]['collision'])
-                    total_exploration.append(fail_case[e]['exploration'])
-                    total_detection.append(fail_case[e]['detection'])
-                    total_success.append(fail_case[e]['success'])
+        #        total_collision = []
+        #        total_exploration = []
+        #        total_detection = []
+        #        total_success = []
+        #        for e in range(args.num_processes):
+        #            total_collision.append(fail_case[e]['collision'])
+        #            total_exploration.append(fail_case[e]['exploration'])
+        #            total_detection.append(fail_case[e]['detection'])
+        #            total_success.append(fail_case[e]['success'])
 
-                if len(total_spl) > 0:
-                    log += " Fail Case: collision/exploration/detection/success:"
-                    log += " {:.0f}/{:.0f}/{:.0f}/{:.0f}({:.0f}),".format(
-                        np.sum(total_collision),
-                        np.sum(total_exploration),
-                        np.sum(total_detection),
-                        np.sum(total_success),
-                        len(total_spl))
+        #        if len(total_spl) > 0:
+        #            log += " Fail Case: collision/exploration/detection/success:"
+        #            log += " {:.0f}/{:.0f}/{:.0f}/{:.0f}({:.0f}),".format(
+        #                np.sum(total_collision),
+        #                np.sum(total_exploration),
+        #                np.sum(total_detection),
+        #                np.sum(total_success),
+        #                len(total_spl))
+
+        #    print(log)
+        #    logging.info(log)
+        ## ------------------------------------------------------------------
+
+    dirname = create_dir(
+        dirname=f'data/traj_datasets/objectnav/{args.objnav_type}/{args.split}/content/episode_num_{args.start_episode_id}-{args.start_episode_id + args.num_eval_episodes - 1}')
+    for scene_id in range(num_scenes):
+        write_json(datasets[scene_id],f'{dirname}/{args.content_scenes[scene_id]}.json')
+        write_gzip(f'{dirname}/{args.content_scenes[scene_id]}.json',
+                   f'{dirname}/{args.content_scenes[scene_id]}.json')
+
+    ## Print and save model performance numbers during evaluation
+    #if args.eval:
+    #    print("Dumping eval details...")
+    #    
+    #    log += "\n\tLLM Rewards: " + str(g_process_rewards /g_sum_rewards)
+    #    log += "\n\tLLM use rate: " + str(g_sum_rewards /g_sum_global)
 
 
-            print(log)
-            logging.info(log)
-        # ------------------------------------------------------------------
+    #    total_success = []
+    #    total_spl = []
+    #    total_dist = []
+    #    for e in range(args.num_processes):
+    #        for acc in episode_success[e]:
+    #            total_success.append(acc)
+    #        for dist in episode_dist[e]:
+    #            total_dist.append(dist)
+    #        for spl in episode_spl[e]:
+    #            total_spl.append(spl)
 
+    #    if len(total_spl) > 0:
+    #        log = "Final ObjectNav succ/spl/dtg:"
+    #        log += " {:.3f}/{:.3f}/{:.3f}({:.0f}),".format(
+    #            np.mean(total_success),
+    #            np.mean(total_spl),
+    #            np.mean(total_dist),
+    #            len(total_spl))
 
-    # Print and save model performance numbers during evaluation
-    if args.eval:
-        print("Dumping eval details...")
-        
-        log += "\n\tLLM Rewards: " + str(g_process_rewards /g_sum_rewards)
-        log += "\n\tLLM use rate: " + str(g_sum_rewards /g_sum_global)
+    #    print(log)
+    #    logging.info(log)
 
+    #    # Save the spl per category
+    #    log = "Success | SPL per category\n"
+    #    for key in success_per_category:
+    #        log += "{}: {} | {}\n".format(key,
+    #                                      sum(success_per_category[key]) /
+    #                                      len(success_per_category[key]),
+    #                                      sum(spl_per_category[key]) /
+    #                                      len(spl_per_category[key]))
 
-        total_success = []
-        total_spl = []
-        total_dist = []
-        for e in range(args.num_processes):
-            for acc in episode_success[e]:
-                total_success.append(acc)
-            for dist in episode_dist[e]:
-                total_dist.append(dist)
-            for spl in episode_spl[e]:
-                total_spl.append(spl)
+    #    print(log)
+    #    logging.info(log)
 
-        if len(total_spl) > 0:
-            log = "Final ObjectNav succ/spl/dtg:"
-            log += " {:.3f}/{:.3f}/{:.3f}({:.0f}),".format(
-                np.mean(total_success),
-                np.mean(total_spl),
-                np.mean(total_dist),
-                len(total_spl))
+    #    with open('{}/{}_spl_per_cat_pred_thr.json'.format(
+    #            dump_dir, args.split), 'w') as f:
+    #        json.dump(spl_per_category, f)
 
-        print(log)
-        logging.info(log)
-            
-        # Save the spl per category
-        log = "Success | SPL per category\n"
-        for key in success_per_category:
-            log += "{}: {} | {}\n".format(key,
-                                          sum(success_per_category[key]) /
-                                          len(success_per_category[key]),
-                                          sum(spl_per_category[key]) /
-                                          len(spl_per_category[key]))
-
-        print(log)
-        logging.info(log)
-
-        with open('{}/{}_spl_per_cat_pred_thr.json'.format(
-                dump_dir, args.split), 'w') as f:
-            json.dump(spl_per_category, f)
-
-        with open('{}/{}_success_per_cat_pred_thr.json'.format(
-                dump_dir, args.split), 'w') as f:
-            json.dump(success_per_category, f)
-
+    #    with open('{}/{}_success_per_cat_pred_thr.json'.format(
+    #            dump_dir, args.split), 'w') as f:
+    #        json.dump(success_per_category, f)
 
 
 if __name__ == "__main__":

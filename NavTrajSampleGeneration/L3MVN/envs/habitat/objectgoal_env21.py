@@ -14,6 +14,7 @@ import envs.utils.pose as pu
 
 coco_categories = [0, 3, 2, 4, 5, 1]
 
+
 class ObjectGoal_Env21(habitat.RLEnv):
     """The Object Goal Navigation environment class. The class is responsible
     for loading the dataset, generating episodes, and computing evaluation
@@ -21,6 +22,7 @@ class ObjectGoal_Env21(habitat.RLEnv):
     """
 
     def __init__(self, args, rank, config_env, dataset):
+        self.first_step = True
         self.args = args
         self.rank = rank
 
@@ -65,7 +67,7 @@ class ObjectGoal_Env21(habitat.RLEnv):
         text = ''
         lines = []
         items = []
-        self.hm3d_semantic_mapping={}
+        self.hm3d_semantic_mapping = {}
 
         with open(fileName, 'r') as f:
             text = f.read()
@@ -98,7 +100,6 @@ class ObjectGoal_Env21(habitat.RLEnv):
         args = self.args
         # new_scene = self.episode_no % args.num_train_episodes == 0
 
-
         self.episode_no += 1
 
         # Initializations
@@ -122,7 +123,6 @@ class ObjectGoal_Env21(habitat.RLEnv):
         #         floor_height.append(abs(obj.aabb.center[1] - start_height))
         #         floor_size.append(obj.aabb.sizes[0]*obj.aabb.sizes[2])
 
-        
         # if not args.eval:
         #     while all(h > 0.1 or s < 12 for (h,s) in zip(floor_height, floor_size)) or abs(start_height-goal_height) > 1.2:
         #         obs = super().reset()
@@ -142,17 +142,19 @@ class ObjectGoal_Env21(habitat.RLEnv):
         self.prev_distance = self._env.get_metrics()["distance_to_goal"]
         self.starting_distance = self._env.get_metrics()["distance_to_goal"]
 
-
         # print("obs: ,", obs)
         # print("obs shape: ,", obs.shape)
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
-        semantic = self._preprocess_semantic(obs["semantic"])
+        #semantic = self._preprocess_semantic(obs["semantic"])
+        semantic = np.zeros_like(obs["rgb"], dtype=np.uint8)
+
         # print("rgb shape: ,", rgb.shape)
         # print("depth shape: ,", depth.shape)
         # print("semantic shape: ,", semantic.shape)
 
-        state = np.concatenate((rgb, depth, semantic), axis=2).transpose(2, 0, 1)
+        state = np.concatenate((rgb, depth, semantic),
+                               axis=2).transpose(2, 0, 1)
         self.last_sim_location = self.get_sim_location()
 
         # Set info
@@ -181,16 +183,25 @@ class ObjectGoal_Env21(habitat.RLEnv):
                          evaluation metric info
         """
         action = action["action"]
+        self.info['action_id'] = action
         if action == 0:
             self.stopped = True
             # Not sending stop to simulator, resetting manually
             action = 3
 
         obs, rew, done, _ = super().step(action)
+        agent_state = super().habitat_env.sim.get_agent_state()
 
         # Get pose change
         dx, dy, do = self.get_pose_change()
         self.info['sensor_pose'] = [dx, dy, do]
+        self.info['agent_state'] = agent_state
+        self.info['current_episode'] = super().habitat_env.current_episode
+        if self.first_step:
+            self.info['dataset'] = super().habitat_env._dataset
+            self.first_step = False
+        else:
+            self.info.pop('dataset', None)
         self.path_length += pu.get_l2_distance(0, dx, 0, dy)
 
         spl, success, dist = 0., 0., 0.
@@ -202,8 +213,10 @@ class ObjectGoal_Env21(habitat.RLEnv):
 
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
-        semantic = self._preprocess_semantic(obs["semantic"])
-        state = np.concatenate((rgb, depth, semantic), axis=2).transpose(2, 0, 1)
+        #semantic = self._preprocess_semantic(obs["semantic"])
+        semantic = np.zeros_like(obs["rgb"], dtype=np.uint8)
+        state = np.concatenate((rgb, depth, semantic),
+                               axis=2).transpose(2, 0, 1)
 
         self.timestep += 1
         self.info['time'] = self.timestep
@@ -249,16 +262,16 @@ class ObjectGoal_Env21(habitat.RLEnv):
     def get_llm_distance(self, target_point_map, frontier_loc_g):
 
         frontier_dis_g = self.gt_planner.fmm_dist[frontier_loc_g[0],
-                                                frontier_loc_g[1]] / 20.0
-        tpm = len(list(set(target_point_map.ravel()))) -1
+                                                  frontier_loc_g[1]] / 20.0
+        tpm = len(list(set(target_point_map.ravel()))) - 1
         for lay in range(tpm):
             frontier_loc = np.argwhere(target_point_map == lay+1)
             frontier_distance = self.gt_planner.fmm_dist[frontier_loc[0],
-                                                      frontier_loc[1]] / 20.0
+                                                         frontier_loc[1]] / 20.0
             if frontier_distance > frontier_dis_g:
                 return 0
         return 1
-        
+
     def get_metrics(self):
         """This function computes evaluation metrics for the Object Goal task
 

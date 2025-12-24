@@ -1,0 +1,6 @@
+# requirements.txt
+SqlAlchemy==2.0
+psycopg2-binary==2.9
+numpy
+sklearn
+esdk-obs-python

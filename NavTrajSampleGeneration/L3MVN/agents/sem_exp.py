@@ -44,11 +44,11 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
         self.device = args.device
         self.sem_pred = SemanticPredMaskRCNN(args)
         self.red_sem_pred = load_rednet(
-            self.device, ckpt='RedNet/model/rednet_semmap_mp3d_40.pth', resize=True, # since we train on half-vision
+            # since we train on half-vision
+            self.device, ckpt='RedNet/model/rednet_semmap_mp3d_40.pth', resize=True,
         )
         self.red_sem_pred.eval()
         # self.red_sem_pred.to(self.device)
-
 
         # initializations for planning:
         self.selem = skimage.morphology.disk(3)
@@ -66,7 +66,7 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
 
         self.replan_count = 0
         self.collision_n = 0
-        self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(3, 3))
+        self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
 
         if args.visualize or args.print_images:
             self.legend = cv2.imread('docs/legend.png')
@@ -109,7 +109,6 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
 
         info['eve_angle'] = self.eve_angle
 
-
         if args.visualize or args.print_images:
             self.vis_image = vu.init_vis_image(self.goal_name, self.legend)
 
@@ -148,7 +147,8 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
             goal = planner_inputs['goal']
             if np.sum(goal == 1) == 1 and self.args.task_config == "tasks/objectnav_gibson.yaml":
                 frontier_loc = np.where(goal == 1)
-                self.info["g_reward"] = self.get_llm_distance(planner_inputs["map_target"], frontier_loc)
+                self.info["g_reward"] = self.get_llm_distance(
+                    planner_inputs["map_target"], frontier_loc)
 
             # self.collision_map = np.zeros(self.visited.shape)
             self.info['clear_flag'] = 0
@@ -184,12 +184,11 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
                 self.fail_case['success'] += 1
 
             # preprocess obs
-            obs = self._preprocess_obs(obs) 
+            obs = self._preprocess_obs(obs)
             self.last_action = action['action']
             self.obs = obs
             self.info = info
             info['eve_angle'] = self.eve_angle
-
 
             # e_time = time.time()
             # ss_time = e_time - c_time
@@ -245,15 +244,15 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
                                        start[1] - 0:start[1] + 1] = 1
 
         # if args.visualize or args.print_images:
-            # Get last loc
+        # Get last loc
         last_start_x, last_start_y = self.last_loc[0], self.last_loc[1]
         r, c = last_start_y, last_start_x
         last_start = [int(r * 100.0 / args.map_resolution - gx1),
-                        int(c * 100.0 / args.map_resolution - gy1)]
+                      int(c * 100.0 / args.map_resolution - gy1)]
         last_start = pu.threshold_poses(last_start, map_pred.shape)
         self.visited_vis[gx1:gx2, gy1:gy2] = \
             vu.draw_line(last_start, start,
-                            self.visited_vis[gx1:gx2, gy1:gy2])
+                         self.visited_vis[gx1:gx2, gy1:gy2])
 
         # Collision check
         if self.last_action == 1 and not planner_inputs["new_goal"]:
@@ -291,7 +290,7 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
                         self.collision_map[r, c] = 1
 
         stg, replan, stop = self._get_stg(map_pred, start, np.copy(goal),
-                                  planning_window)
+                                          planning_window)
 
         if replan:
             self.replan_count += 1
@@ -314,13 +313,17 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
             if relative_angle > 180:
                 relative_angle -= 360
 
-            ## add the evelution angle
+            # add the evelution angle
             eve_start_x = int(5 * math.sin(angle_st_goal) + start[0])
             eve_start_y = int(5 * math.cos(angle_st_goal) + start[1])
-            if eve_start_x > map_pred.shape[0]: eve_start_x = map_pred.shape[0] 
-            if eve_start_y > map_pred.shape[0]: eve_start_y = map_pred.shape[0] 
-            if eve_start_x < 0: eve_start_x = 0 
-            if eve_start_y < 0: eve_start_y = 0 
+            if eve_start_x >= map_pred.shape[0]:
+                eve_start_x = map_pred.shape[0] - 1
+            if eve_start_y >= map_pred.shape[0]:
+                eve_start_y = map_pred.shape[0] - 1
+            if eve_start_x < 0:
+                eve_start_x = 0
+            if eve_start_y < 0:
+                eve_start_y = 0
             if exp_pred[eve_start_x, eve_start_y] == 0 and self.eve_angle > -60:
                 action = 5
                 self.eve_angle -= 30
@@ -355,7 +358,8 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
             self.selem) != True
         traversible[self.collision_map[gx1:gx2, gy1:gy2]
                     [x1:x2, y1:y2] == 1] = 0
-        traversible[cv2.dilate(self.visited_vis[gx1:gx2, gy1:gy2][x1:x2, y1:y2], self.kernel) == 1] = 1
+        traversible[cv2.dilate(
+            self.visited_vis[gx1:gx2, gy1:gy2][x1:x2, y1:y2], self.kernel) == 1] = 1
 
         traversible[int(start[0] - x1) - 1:int(start[0] - x1) + 2,
                     int(start[1] - y1) - 1:int(start[1] - y1) + 2] = 1
@@ -383,27 +387,28 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
         obs = obs.transpose(1, 2, 0)
         rgb = obs[:, :, :3]
         depth = obs[:, :, 3:4]
-        semantic = obs[:,:,4:5].squeeze()
+        semantic = obs[:, :, 4:5].squeeze()
         # print("obs: ", semantic.shape)
         if args.use_gtsem:
             self.rgb_vis = rgb
             sem_seg_pred = np.zeros((rgb.shape[0], rgb.shape[1], 15 + 1))
             for i in range(16):
-                sem_seg_pred[:,:,i][semantic == i+1] = 1
-        else: 
+                sem_seg_pred[:, :, i][semantic == i+1] = 1
+        else:
             red_semantic_pred, semantic_pred = self._get_sem_pred(
                 rgb.astype(np.uint8), depth, use_seg=use_seg)
-            
-            sem_seg_pred = np.zeros((rgb.shape[0], rgb.shape[1], 15 + 1))   
+
+            sem_seg_pred = np.zeros((rgb.shape[0], rgb.shape[1], 15 + 1))
             for i in range(0, 15):
                 # print(mp_categories_mapping[i])
-                sem_seg_pred[:,:,i][red_semantic_pred == mp_categories_mapping[i]] = 1
+                sem_seg_pred[:, :, i][red_semantic_pred ==
+                                      mp_categories_mapping[i]] = 1
 
-            sem_seg_pred[:,:,0][semantic_pred[:,:,0] == 0] = 0
-            sem_seg_pred[:,:,1][semantic_pred[:,:,1] == 0] = 0
-            sem_seg_pred[:,:,3][semantic_pred[:,:,3] == 0] = 0
-            sem_seg_pred[:,:,4][semantic_pred[:,:,4] == 1] = 1
-            sem_seg_pred[:,:,5][semantic_pred[:,:,5] == 1] = 1
+            sem_seg_pred[:, :, 0][semantic_pred[:, :, 0] == 0] = 0
+            sem_seg_pred[:, :, 1][semantic_pred[:, :, 1] == 0] = 0
+            sem_seg_pred[:, :, 3][semantic_pred[:, :, 3] == 0] = 0
+            sem_seg_pred[:, :, 4][semantic_pred[:, :, 4] == 1] = 1
+            sem_seg_pred[:, :, 5][semantic_pred[:, :, 5] == 1] = 1
 
         # sem_seg_pred = self._get_sem_pred(
         #     rgb.astype(np.uint8), depth, use_seg=use_seg)
@@ -442,7 +447,8 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
     def _get_sem_pred(self, rgb, depth, use_seg=True):
         if use_seg:
             image = torch.from_numpy(rgb).to(self.device).unsqueeze_(0).float()
-            depth = torch.from_numpy(depth).to(self.device).unsqueeze_(0).float()
+            depth = torch.from_numpy(depth).to(
+                self.device).unsqueeze_(0).float()
             with torch.no_grad():
                 red_semantic_pred = self.red_sem_pred(image, depth)
                 red_semantic_pred = red_semantic_pred.squeeze().cpu().detach().numpy()
@@ -502,7 +508,8 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
             f_pos = np.argwhere(goal == 1)
             # fmb = get_frontier_boundaries((f_pos[0][0], f_pos[0][1]))
             # goal_fmb = skimage.draw.circle_perimeter(int((fmb[0]+fmb[1])/2), int((fmb[2]+fmb[3])/2), 23)
-            goal_fmb = skimage.draw.circle_perimeter(f_pos[0][0], f_pos[0][1], local_w/4-2)
+            goal_fmb = skimage.draw.circle_perimeter(
+                f_pos[0][0], f_pos[0][1], local_w/4-2)
             goal_fmb[0][goal_fmb[0] > local_w-1] = local_w-1
             goal_fmb[1][goal_fmb[1] > local_w-1] = local_w-1
             goal_fmb[0][goal_fmb[0] < 0] = 0
@@ -510,7 +517,6 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
             # goal_fmb[goal_fmb < 0] =0
             goal_mask[goal_fmb[0], goal_fmb[1]] = 1
             sem_map[goal_mask] = 4
-
 
         color_pal = [int(x * 255.) for x in color_palette]
         sem_map_vis = Image.new("P", (sem_map.shape[1],
@@ -550,5 +556,3 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
                 dump_dir, self.rank, self.episode_no,
                 self.rank, self.episode_no, self.timestep)
             cv2.imwrite(fn, self.vis_image)
-
-

@@ -11,11 +11,15 @@ from agents.sem_exp import Sem_Exp_Env_Agent
 from .objectgoal_env import ObjectGoal_Env
 from .objectgoal_env21 import ObjectGoal_Env21
 
-from .utils.vector_env import VectorEnv
+from .utils.vector_env import VectorEnv, ThreadedVectorEnv
 
 
 def make_env_fn(args, config_env, rank):
     dataset = make_dataset(config_env.DATASET.TYPE, config=config_env.DATASET)
+    if args.start_episode_id >= len(dataset.episodes):
+        dataset.episodes = dataset.episodes[:1]
+    else:
+        dataset.episodes = dataset.episodes[args.start_episode_id:]
     config_env.defrost()
     config_env.SIMULATOR.SCENE = dataset.episodes[0].scene_id
     config_env.freeze()
@@ -27,9 +31,9 @@ def make_env_fn(args, config_env, rank):
                                 )
     elif args.agent == "obj21":
         env = ObjectGoal_Env21(args=args, rank=rank,
-                             config_env=config_env,
-                             dataset=dataset
-                             )
+                               config_env=config_env,
+                               dataset=dataset
+                               )
     else:
         env = ObjectGoal_Env(args=args, rank=rank,
                              config_env=config_env,
@@ -59,6 +63,7 @@ def construct_envs(args):
                                          + args.task_config])
     basic_config.defrost()
     basic_config.DATASET.SPLIT = args.split
+    basic_config.DATASET.CONTENT_SCENES = args.content_scenes
     # basic_config.DATASET.DATA_PATH = \
     #     basic_config.DATASET.DATA_PATH.replace("v1", args.version)
     # basic_config.DATASET.EPISODES_DIR = \
@@ -67,9 +72,10 @@ def construct_envs(args):
 
     scenes = basic_config.DATASET.CONTENT_SCENES
     if "*" in basic_config.DATASET.CONTENT_SCENES:
-        content_dir = os.path.join("data/datasets/objectnav/gibson/v1.1/" + args.split, "content")
+        content_dir = os.path.join(
+            "data/datasets/objectnav/gibson/v1.1/" + args.split, "content")
         scenes = _get_scenes_from_folder(content_dir)
-    
+
     if len(scenes) > 0:
         assert len(scenes) >= args.num_processes, (
             "reduce the number of processes as there "
@@ -83,7 +89,7 @@ def construct_envs(args):
 
     print("Scenes per thread:")
     for i in range(args.num_processes):
-        config_env = cfg_env(config_paths=["envs/habitat/configs/"
+        config_env = cfg_env(config_paths=["env/habitat/configs/"
                                            + args.task_config])
         config_env.defrost()
 
@@ -130,7 +136,7 @@ def construct_envs(args):
         config_env.SIMULATOR.SEMANTIC_SENSOR.HFOV = args.hfov
         config_env.SIMULATOR.SEMANTIC_SENSOR.POSITION = \
             [0, args.camera_height, 0]
-       
+
         config_env.SIMULATOR.TURN_ANGLE = args.turn_angle
         config_env.DATASET.SPLIT = args.split
         # config_env.DATASET.DATA_PATH = \
@@ -163,14 +169,17 @@ def construct_envs21(args):
                                          + args.task_config])
     basic_config.defrost()
     basic_config.DATASET.SPLIT = args.split
-    basic_config.DATASET.DATA_PATH = \
-        basic_config.DATASET.DATA_PATH.replace("v1", args.version)
+    basic_config.DATASET.CONTENT_SCENES = args.content_scenes
+    #basic_config.DATASET.DATA_PATH = \
+    #    basic_config.DATASET.DATA_PATH.replace("v1", args.version)
     # basic_config.DATASET.EPISODES_DIR = \
     #     basic_config.DATASET.EPISODES_DIR.replace("v1", args.version)
     basic_config.freeze()
 
     scenes = basic_config.DATASET.CONTENT_SCENES
-    dataset = make_dataset(basic_config.DATASET.TYPE, config=basic_config.DATASET)
+    dataset = make_dataset(basic_config.DATASET.TYPE,
+                           config=basic_config.DATASET)
+
     if "*" in basic_config.DATASET.CONTENT_SCENES:
         scenes = dataset.get_scenes_to_load(basic_config.DATASET)
 
@@ -235,11 +244,10 @@ def construct_envs21(args):
         config_env.SIMULATOR.SEMANTIC_SENSOR.POSITION = \
             [0, args.camera_height, 0]
 
-        
         config_env.SIMULATOR.TURN_ANGLE = args.turn_angle
         config_env.DATASET.SPLIT = args.split
-        config_env.DATASET.DATA_PATH = \
-            config_env.DATASET.DATA_PATH.replace("v1", args.version)
+        #config_env.DATASET.DATA_PATH = \
+        #    config_env.DATASET.DATA_PATH.replace("v1", args.version)
         # config_env.DATASET.EPISODES_DIR = \
         #     config_env.DATASET.EPISODES_DIR.replace("v1", args.version)
 
@@ -248,17 +256,13 @@ def construct_envs21(args):
 
         args_list.append(args)
 
-    envs = VectorEnv(
+    envs = ThreadedVectorEnv(
         make_env_fn=make_env_fn,
         env_fn_args=tuple(
             tuple(
-                zip(args_list, env_configs, range(args.num_processes))
+                zip(args_list, env_configs, range(len(args_list)))
             )
         ),
     )
 
     return envs
-
-
-
-    

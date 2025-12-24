@@ -1,28 +1,40 @@
 import argparse
+import re
 import torch
+
+# scene_type mapping file path
+SCENE_SPLIT_PATH = {
+    'hm3d_v1_train': 'configs/scene_name/hm3d_v1_train_scenes.txt',
+    'hm3d_v2_train': 'configs/scene_name/hm3d_v2_train_scenes.txt',
+}
 
 
 def get_args():
     parser = argparse.ArgumentParser(
         description='Goal-Oriented-Semantic-Exploration')
 
+    parser.add_argument('--content_scenes', type=str, default='*', required=True)
+    parser.add_argument('--start_episode_id', type=int, default=0, required=True)
+    parser.add_argument('--scene_type', type=str, default='hm3d_v2', help='type of scene dataset, hm3d_v1, hm3d_v2', required=True)
+    parser.add_argument('--objnav_type', type=str, default='hm3d_v2', help='type of objnav dataset, hm3d_v1_hd, hm3d_v2', required=True)
+
     # General Arguments
     parser.add_argument('--seed', type=int, default=1,
                         help='random seed (default: 1)')
-    parser.add_argument('--auto_gpu_config', type=int, default=1)
+    parser.add_argument('--auto_gpu_config', type=int, default=0)
     parser.add_argument('--total_num_scenes', type=str, default="auto")
-    parser.add_argument('-n', '--num_processes', type=int, default=5,
+    parser.add_argument('-n', '--num_processes', type=int, default=3,
                         help="""how many training processes to use (default:5)
                                 Overridden when auto_gpu_config=1
-                                and training on gpus""")
+                                and training on gpus""", required=True)
     parser.add_argument('--num_processes_per_gpu', type=int, default=6)
     parser.add_argument('--num_processes_on_first_gpu', type=int, default=1)
-    parser.add_argument('--eval', type=int, default=0,
+    parser.add_argument('--eval', type=int, default=1,
                         help='0: Train, 1: Evaluate (default: 0)')
     parser.add_argument('--num_training_frames', type=int, default=10000000,
                         help='total number of training frames')
     parser.add_argument('--num_eval_episodes', type=int, default=400,
-                        help="number of test episodes per scene")
+                        help="number of test episodes per scene", required=True)
     parser.add_argument('--num_train_episodes', type=int, default=10000,
                         help="""number of train episodes per scene
                                 before loading the next scene""")
@@ -73,7 +85,7 @@ def get_args():
                         default="tasks/objectnav_hm3d.yaml",
                         help="path to config yaml containing task information")
     parser.add_argument("--split", type=str, default="train",
-                        help="dataset split (train | val | val_mini) ")
+                        help="dataset split (train | val | val_mini) ", required=True)
     parser.add_argument('--camera_height', type=float, default=0.88,
                         help="agent camera height in metres")
     parser.add_argument('--hfov', type=float, default=79.0,
@@ -149,7 +161,6 @@ def get_args():
     parser.add_argument('--exp_pred_threshold', type=float, default=1.0)
     parser.add_argument('--collision_threshold', type=float, default=0.10)
 
-
     parser.add_argument('--use_gtsem', type=int, default=0)
 
     # train_se_frontier
@@ -158,11 +169,31 @@ def get_args():
                         help="""model path to load,
                                 0 to not reload (default: 0)""")
 
-
     # parse arguments
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
+    args.task_config = f'tasks/objectnav_{args.objnav_type}.yaml'
+
+    if args.content_scenes != '*':
+        scene_list = []
+        ids = args.content_scenes.split(',')
+        assert len(
+            ids) == args.num_processes, f'content_scenes len should equal to num_processes {args.num_processes}'
+
+        scene_split_file = SCENE_SPLIT_PATH[f'{args.scene_type}_{args.split}']
+        all_scene_list = []
+
+        with open(scene_split_file, 'r', encoding='utf-8') as file:
+            for line in file:
+                all_scene_list.append(line.strip())
+
+        for scene_id in ids:
+            scene_name = all_scene_list[int(scene_id)]
+            print(f'using {scene_name} to gen data')
+            scene_list.append(scene_name)
+
+        args.content_scenes = scene_list
 
     if args.cuda:
         if args.auto_gpu_config:

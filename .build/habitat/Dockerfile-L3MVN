@@ -1,0 +1,76 @@
+ARG UBUNTU_VERSION=20.04
+ARG NVIDIA_CUDA_VERSION=11.4.1
+
+FROM nvidia/cudagl:${NVIDIA_CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}
+
+RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install --no-install-recommends -y \
+    build-essential \
+    git \
+    wget \
+    vim \
+    curl \
+    unzip \
+    unrar \
+    cmake \
+    ca-certificates \
+    libopengl-dev \ 
+    libjpeg-dev \
+    libpng-dev \
+    libglfw3-dev \
+    libglm-dev \
+    libx11-dev \
+    libomp-dev \
+    libegl1-mesa-dev \
+    libglib2.0-0
+
+WORKDIR /root/
+
+#[install conda] (having connection error with anaconda3 23-07-2)
+RUN wget https://repo.anaconda.com/archive/Anaconda3-2024.10-1-Linux-x86_64.sh --no-check-certificate \
+    && /bin/bash Anaconda3-2024.10-1-Linux-x86_64.sh -b
+
+ENV PATH=$PATH:/root/anaconda3/bin
+RUN rm /bin/sh && ln -s /bin/bash /bin/sh
+
+#[dependences for L3MVN]
+RUN conda create --name "L3MVN" python==3.7 cmake=3.14.0
+SHELL ["conda", "run", "-n", "L3MVN", "/bin/bash", "-c"]
+RUN conda install cudatoolkit==11.0.221 
+RUN pip install torch==1.7.0+cu110 torchvision==0.8.1+cu110 -f https://download.pytorch.org/whl/cu110/torch_stable.html
+
+
+RUN conda list | grep torch
+
+RUN git clone https://github.com/facebookresearch/habitat-sim.git 
+RUN cd habitat-sim && git checkout tags/challenge-2022 && pip install --no-cache-dir -r requirements.txt 
+RUN cd habitat-sim && python setup.py install --headless --with-cuda
+
+RUN git clone https://github.com/facebookresearch/habitat-lab.git 
+RUN cd habitat-lab && git checkout tags/challenge-2022 
+RUN cd habitat-lab && pip install -r requirements.txt
+RUN cd habitat-lab && python setup.py develop --all 
+# 
+
+#[install detectron2]
+RUN python -m pip install 'git+https://github.com/facebookresearch/detectron2.git@v0.5'
+# RUN python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
+
+#[install L3MVN]
+RUN git clone https://github.com/ybgdgh/L3MVN.git
+# remove broken dependency
+RUN cd L3MVN/ && sed -i "1d" requirements.txt &&  pip install -r requirements.txt
+RUN pip install scikit-fmm gdown
+#[download segmentation model]
+RUN mkdir /root/L3MVN/RedNet/model/
+RUN gdown --fuzzy https://drive.google.com/file/d/1U0dS44DIPZ22nTjw0RfO431zV-lMPcvv/view?usp=share_link -O /root/L3MVN/RedNet/model/
+
+# remove unused dependency
+RUN sed -i 40d /root/L3MVN/main_llm_vis.py
+
+RUN printf "#!/bin/bash\n \
+source activate base && conda activate L3MVN && cd /root/L3MVN/ \
+" > /root/start.sh
+
+RUN chmod +x /root/start.sh
+
+ENTRYPOINT ["/bin/bash"]

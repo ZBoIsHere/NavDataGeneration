@@ -1,0 +1,65 @@
+# Base image
+ARG UBUNTU_VERSION=20.04
+ARG NVIDIA_CUDA_VERSION=11.4.1
+FROM nvidia/cudagl:${NVIDIA_CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}
+
+# Install basic packages
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
+    build-essential git wget curl zip unzip unrar \
+    vim cmake ca-certificates \
+    libopengl-dev libjpeg-dev libpng-dev \
+    libglfw3-dev libglm-dev libx11-dev libomp-dev \
+    libegl1-mesa-dev libglib2.0-0 pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Miniconda
+ENV CONDA_DIR=/opt/conda
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
+    bash ~/miniconda.sh -b -p $CONDA_DIR && \
+    rm ~/miniconda.sh
+ENV PATH=$CONDA_DIR/bin:$PATH
+
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
+# Create conda environment
+RUN conda create -y -n habitat python=3.7 cmake=3.14.0 && \
+    conda clean -afy
+
+# Activate environment and install habitat-sim
+RUN git clone https://github.com/facebookresearch/habitat-sim.git -b v0.2.2 && cd habitat-sim && \
+    conda run -n habitat pip install --no-cache-dir -r requirements.txt && \
+    conda run -n habitat python setup.py install --headless --with-cuda
+
+# Install habitat-lab, not include habitat-baseline
+RUN git clone https://github.com/facebookresearch/habitat-lab.git -b v0.2.2 && cd habitat-lab && \
+    conda run -n habitat pip install -r requirements.txt && \
+    conda run -n habitat pip install -e .
+
+# Install pytorch, refer[https://pytorch.org/get-started/previous-versions/]
+RUN conda install -n habitat pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch
+
+# Set default shell to bash and activate environment
+SHELL ["/bin/bash", "-c"]
+ENV PATH=$CONDA_DIR/envs/habitat/bin:$PATH
+
+
+# Install L3MVN
+RUN python -m pip install 'git+https://github.com/facebookresearch/detectron2.git@v0.5'
+
+RUN git clone https://github.com/ZBoIsHere/L3MVN.git && cd L3MVN/ && \ 
+    pip install -r requirements.txt
+
+RUN pip install scikit-fmm gdown
+#[download segmentation model]
+RUN mkdir -p /root/L3MVN/RedNet/model/
+RUN gdown --fuzzy https://drive.google.com/file/d/1U0dS44DIPZ22nTjw0RfO431zV-lMPcvv/view?usp=share_link -O /root/L3MVN/RedNet/model/
+
+# Silence habitat-sim logs
+ENV GLOG_minloglevel=2
+ENV MAGNUM_LOG="quiet"
+
+# Install pirlnav
+RUN git clone https://github.com/ZBoIsHere/pirlnav.git -b main
+RUN conda run -n habitat pip install lmdb webdataset==0.1.103
+RUN apt-get update && apt-get install -y iproute2

@@ -1,0 +1,156 @@
+metadata:
+  name: traj-replay
+  namespace: argo
+  uid: 36170c6b-06a9-42d1-a84a-d4ffee61329e
+  resourceVersion: '61335643'
+  generation: 32
+  creationTimestamp: '2025-09-06T22:37:45Z'
+  labels:
+    workflows.argoproj.io/creator: system-serviceaccount-argo-jenkins
+  managedFields:
+    - manager: argo
+      operation: Update
+      apiVersion: argoproj.io/v1alpha1
+      time: '2025-11-29T02:27:18Z'
+      fieldsType: FieldsV1
+      fieldsV1:
+        f:metadata:
+          f:labels:
+            .: {}
+            f:workflows.argoproj.io/creator: {}
+        f:spec: {}
+spec:
+  templates:
+    - name: main
+      inputs: {}
+      outputs: {}
+      metadata: {}
+      steps:
+        - - name: list-files
+            template: list-json-files
+            arguments: {}
+        - - name: process-files
+            template: print-file-name
+            arguments:
+              parameters:
+                - name: scene_name
+                  value: '{{item}}'
+            withParam: '{{steps.list-files.outputs.result}}'
+    - name: list-json-files
+      inputs: {}
+      outputs: {}
+      metadata: {}
+      script:
+        name: ''
+        image: swr.cn-east-3.myhuaweicloud.com/meadow/l3mvn:base-v250830
+        command:
+          - python
+        workingDir: /app/data/z00562901/NavDataGeneration/
+        resources: {}
+        volumeMounts:
+          - name: volume-data-platform
+            mountPath: >-
+              /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/data/
+            subPath: data-platform/data/
+          - name: volume-data-platform
+            mountPath: >-
+              /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/model/
+            subPath: data-platform/model/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/data/
+            subPath: data-platform/data/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/model/
+            subPath: data-platform/model/
+        source: >
+          import os, json
+
+          directory = "{{workflow.parameters.traj_path}}"
+
+          files = [os.path.splitext(os.path.splitext(f)[0])[0] for f in
+          os.listdir(directory) if f.endswith(".json.gz")]
+
+          print(json.dumps(files))
+    - name: print-file-name
+      inputs:
+        parameters:
+          - name: scene_name
+      outputs: {}
+      metadata: {}
+      script:
+        name: ''
+        image: swr.cn-east-3.myhuaweicloud.com/meadow/l3mvn:base-v250830
+        command:
+          - /bin/bash
+          - '-c'
+        args:
+          - >-
+            source /root/anaconda3/bin/activate && conda activate L3MVN && cd
+            /app/data/z00562901/NavDataGeneration/ && python
+            benchmark_tools/data_analyzer/traj_analyzer/traj_replay.py
+            --traj_path {{workflow.parameters.traj_path}} --scene_name
+            {{inputs.parameters.scene_name}} --scene_type
+            {{workflow.parameters.scene_type}} --save_video
+            {{workflow.parameters.save_video}} --save_video_interval
+            {{workflow.parameters.save_video_interval}} --save_metric
+            {{workflow.parameters.save_metric}} --allow_sliding
+            {{workflow.parameters.allow_sliding}}
+        resources:
+          limits:
+            nvidia.com/gpu: '1'
+        volumeMounts:
+          - name: volume-data-platform
+            mountPath: >-
+              /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/data/
+            subPath: data-platform/data/
+          - name: volume-data-platform
+            mountPath: >-
+              /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/model/
+            subPath: data-platform/model/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/data/
+            subPath: data-platform/data/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/model/
+            subPath: data-platform/model/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/
+            subPath: data-platform/NavDataGeneration/
+        source: ''
+  entrypoint: main
+  arguments:
+    parameters:
+      - name: traj_path
+        default: data/traj_datasets/objectnav/traj_test/train/content
+        description: 轨迹数据集路径
+      - name: scene_type
+        default: hm3d_v1
+        description: 场景类型，hm3d_v1, hm3d_v2, cloudrobo_v1
+      - name: save_video
+        default: 'False'
+        description: 是否保存回放视频，视频默认存储在{traj_path}_viedos下
+      - name: save_video_interval
+        default: '1000'
+        description: 保存视频的间隔，默认1000
+      - name: save_metric
+        default: 'True'
+        description: 是否保存metric，metric默认存储在{traj_path}_metrics下
+      - name: allow_sliding
+        default: 'False'
+        description: 是否允许滑动
+  volumes:
+    - name: volume-data-platform
+      persistentVolumeClaim:
+        claimName: pvc-data-platform
+  tolerations:
+    - key: workflows.argoproj.io/workflow-template
+      operator: Equal
+      value: traj-replay
+      effect: NoExecute
+  imagePullSecrets:
+    - name: default-secret
+  priority: 1000
+  podPriorityClassName: high-1000
+  workflowMetadata:
+    annotations:
+      workflows.argoproj.io/description: '{{workflow.parameters.traj_path}}'

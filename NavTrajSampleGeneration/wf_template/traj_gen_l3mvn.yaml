@@ -1,0 +1,179 @@
+metadata:
+  name: l3mnv-scene-batch-new2
+  namespace: argo
+  uid: bf9bd664-c63b-4e4b-a965-3e7ba819a04e
+  resourceVersion: '41921341'
+  generation: 3
+  creationTimestamp: '2025-11-03T03:51:18Z'
+  labels:
+    workflows.argoproj.io/creator: system-serviceaccount-argo-jenkins
+  managedFields:
+    - manager: argo
+      operation: Update
+      apiVersion: argoproj.io/v1alpha1
+      time: '2025-11-03T03:52:29Z'
+      fieldsType: FieldsV1
+      fieldsV1:
+        f:metadata:
+          f:labels:
+            .: {}
+            f:workflows.argoproj.io/creator: {}
+        f:spec: {}
+spec:
+  templates:
+    - name: parallel-tasks-hm3d-v2
+      inputs: {}
+      outputs: {}
+      metadata: {}
+      steps:
+        - - name: run-l3mnv-group
+            template: l3mnv-task
+            arguments:
+              parameters:
+                - name: content_scenes_1
+                  value: '{{item.content_scenes_1}}'
+                - name: num_scenes_1
+                  value: '{{item.num_scenes_1}}'
+                - name: content_scenes_2
+                  value: '{{item.content_scenes_2}}'
+                - name: num_scenes_2
+                  value: '{{item.num_scenes_2}}'
+                - name: content_scenes_3
+                  value: '{{item.content_scenes_3}}'
+                - name: num_scenes_3
+                  value: '{{item.num_scenes_3}}'
+            withParam: |
+              [
+                {"content_scenes_1": "0,1,2,3", "num_scenes_1": 4, "content_scenes_2": "4,5,6,7", "num_scenes_2": 4, "content_scenes_3": "8,9,10,11", "num_scenes_3": 4},
+                {"content_scenes_1": "12,13,14,15", "num_scenes_1": 4, "content_scenes_2": "16,17,18,19", "num_scenes_2": 4, "content_scenes_3": "20,21,22,23", "num_scenes_3": 4},
+                {"content_scenes_1": "24,25,26,27", "num_scenes_1": 4, "content_scenes_2": "28,29,30,31", "num_scenes_2": 4, "content_scenes_3": "32,33,34,35", "num_scenes_3": 4},
+                {"content_scenes_1": "36,37,38,39", "num_scenes_1": 4, "content_scenes_2": "40,41,42,43", "num_scenes_2": 4, "content_scenes_3": "44,45,46,47", "num_scenes_3": 4},
+                {"content_scenes_1": "48,49,50,51", "num_scenes_1": 4, "content_scenes_2": "52,53,54,55", "num_scenes_2": 4, "content_scenes_3": "56,57,58,59", "num_scenes_3": 4},
+                {"content_scenes_1": "60,61,62,63", "num_scenes_1": 4, "content_scenes_2": "64,65,66,67", "num_scenes_2": 4, "content_scenes_3": "68,69,70,71", "num_scenes_3": 4},
+                {"content_scenes_1": "72,73,74,75", "num_scenes_1": 4, "content_scenes_2": "76,77,78,79", "num_scenes_2": 4, "content_scenes_3": "80,81,82,83", "num_scenes_3": 4},
+                {"content_scenes_1": "84,85,86,87", "num_scenes_1": 4, "content_scenes_2": "88,89,90,91", "num_scenes_2": 4, "content_scenes_3": "92,93,94,95", "num_scenes_3": 4},
+                {"content_scenes_1": "96,97,98,99", "num_scenes_1": 4, "content_scenes_2": "100,101,102,103", "num_scenes_2": 4, "content_scenes_3": "104,105,106,107", "num_scenes_3": 4},
+                {"content_scenes_1": "108,109,110,111", "num_scenes_1": 4, "content_scenes_2": "112,113,114,115", "num_scenes_2": 4, "content_scenes_3": "116,117,118,119", "num_scenes_3": 4},
+                {"content_scenes_1": "120,121,122,123", "num_scenes_1": 4, "content_scenes_2": "124,125,126,127", "num_scenes_2": 4, "content_scenes_3": "128,129,130,131", "num_scenes_3": 4},
+                {"content_scenes_1": "132,133,134,135", "num_scenes_1": 4, "content_scenes_2": "136,137,138,139", "num_scenes_2": 4, "content_scenes_3": "140,141,142,143,144", "num_scenes_3": 5}
+              ]
+    - name: l3mnv-task
+      inputs:
+        parameters:
+          - name: num_scenes_1
+          - name: content_scenes_1
+          - name: num_scenes_2
+          - name: content_scenes_2
+          - name: num_scenes_3
+          - name: content_scenes_3
+      outputs: {}
+      metadata: {}
+      containerSet:
+        containers:
+          - name: l3mvn-1
+            image: swr.cn-east-3.myhuaweicloud.com/meadow/l3mvn:base-v250830
+            command:
+              - /bin/bash
+              - '-c'
+            args:
+              - >-
+                export CUDA_VISIBLE_DEVICES=$(cat /tmp/shared/gpu-id); source
+                /root/anaconda3/bin/activate && conda activate L3MVN && cd
+                /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/
+                && python main_llm_vis.py --content_scenes
+                {{inputs.parameters.content_scenes_1}} -n
+                {{inputs.parameters.num_scenes_1}} --split train
+                --num_eval_episodes {{workflow.parameters.episode_num}}
+                --start_episode_id {{workflow.parameters.start_episode_id}}
+                --scene_type {{workflow.parameters.scene_type}} --objnav_type
+                {{workflow.parameters.objnav_type}}
+            resources: {}
+          - name: l3mvn-2
+            image: swr.cn-east-3.myhuaweicloud.com/meadow/l3mvn:base-v250830
+            command:
+              - /bin/bash
+              - '-c'
+            args:
+              - >-
+                export CUDA_VISIBLE_DEVICES=$(cat /tmp/shared/gpu-id); source
+                /root/anaconda3/bin/activate && conda activate L3MVN && cd
+                /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/
+                && python main_llm_vis.py --content_scenes
+                {{inputs.parameters.content_scenes_2}} -n
+                {{inputs.parameters.num_scenes_2}} --split train
+                --num_eval_episodes {{workflow.parameters.episode_num}}
+                --start_episode_id {{workflow.parameters.start_episode_id}}
+                --scene_type {{workflow.parameters.scene_type}} --objnav_type
+                {{workflow.parameters.objnav_type}}
+            resources: {}
+          - name: l3mvn-3
+            image: swr.cn-east-3.myhuaweicloud.com/meadow/l3mvn:base-v250830
+            command:
+              - /bin/bash
+              - '-c'
+            args:
+              - >-
+                export CUDA_VISIBLE_DEVICES=$(cat /tmp/shared/gpu-id); source
+                /root/anaconda3/bin/activate && conda activate L3MVN && cd
+                /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/
+                && python main_llm_vis.py --content_scenes
+                {{inputs.parameters.content_scenes_3}} -n
+                {{inputs.parameters.num_scenes_3}} --split train
+                --num_eval_episodes {{workflow.parameters.episode_num}}
+                --start_episode_id {{workflow.parameters.start_episode_id}}
+                --scene_type {{workflow.parameters.scene_type}} --objnav_type
+                {{workflow.parameters.objnav_type}}
+            resources: {}
+        volumeMounts:
+          - name: volume-data-platform
+            mountPath: >-
+              /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/data/
+            subPath: data-platform/data/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/
+            subPath: data-platform/NavDataGeneration/
+          - name: shared
+            mountPath: /tmp/shared
+      initContainers:
+        - name: get-gpu-id
+          image: swr.cn-east-3.myhuaweicloud.com/meadow/l3mvn:base-v250830
+          command:
+            - /bin/bash
+            - '-c'
+          args:
+            - echo "$NVIDIA_VISIBLE_DEVICES" > /tmp/shared/gpu-id
+          resources:
+            limits:
+              nvidia.com/gpu: '1'
+          volumeMounts:
+            - name: shared
+              mountPath: /tmp/shared
+  entrypoint: parallel-tasks-hm3d-v2
+  arguments:
+    parameters:
+      - name: start_episode_id
+        value: '3100'
+      - name: episode_num
+        value: '100'
+      - name: objnav_type
+        value: hm3d_v2
+      - name: scene_type
+        value: hm3d_v2
+  volumes:
+    - name: volume-data-platform
+      persistentVolumeClaim:
+        claimName: pvc-data-platform
+    - name: shared
+      emptyDir: {}
+  tolerations:
+    - key: workflows.argoproj.io/workflow-template
+      operator: Equal
+      value: l3mvn-scene-batch-new
+      effect: NoExecute
+  imagePullSecrets:
+    - name: default-secret
+  workflowMetadata:
+    annotations:
+      workflows.argoproj.io/description: >-
+        {{workflow.parameters.objnav_type}}
+        {{workflow.parameters.start_episode_id}}

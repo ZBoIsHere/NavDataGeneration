@@ -1,0 +1,121 @@
+metadata:
+  name: traj-gen-sp
+  namespace: argo
+  uid: f38b5f48-7565-439d-b4c7-2c169dab2b87
+  resourceVersion: '48707954'
+  generation: 5
+  creationTimestamp: '2025-11-12T02:08:56Z'
+  labels:
+    workflows.argoproj.io/creator: system-serviceaccount-argo-jenkins
+  managedFields:
+    - manager: argo
+      operation: Update
+      apiVersion: argoproj.io/v1alpha1
+      time: '2025-11-12T02:39:04Z'
+      fieldsType: FieldsV1
+      fieldsV1:
+        f:metadata:
+          f:labels:
+            .: {}
+            f:workflows.argoproj.io/creator: {}
+        f:spec: {}
+spec:
+  templates:
+    - name: main
+      inputs: {}
+      outputs: {}
+      metadata: {}
+      steps:
+        - - name: list-files
+            template: list-json-files
+            arguments: {}
+        - - name: process-files
+            template: print-file-name
+            arguments:
+              parameters:
+                - name: scene_name
+                  value: '{{item}}'
+            withParam: '{{steps.list-files.outputs.result}}'
+    - name: list-json-files
+      inputs: {}
+      outputs: {}
+      metadata: {}
+      script:
+        name: ''
+        image: swr.cn-east-3.myhuaweicloud.com/meadow/l3mvn:base-v250830
+        command:
+          - python
+        workingDir: /app/data/z00562901/NavDataGeneration/
+        resources: {}
+        volumeMounts:
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/
+            subPath: data-platform/NavDataGeneration/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/data/
+            subPath: data-platform/data/
+        source: >
+          import os, json
+
+          directory = "{{workflow.parameters.traj_path}}"
+
+          files = [os.path.splitext(os.path.splitext(f)[0])[0] for f in
+          os.listdir(directory) if f.endswith(".json.gz")]
+
+          print(json.dumps(files))
+    - name: print-file-name
+      inputs:
+        parameters:
+          - name: scene_name
+      outputs: {}
+      metadata: {}
+      script:
+        name: ''
+        image: swr.cn-east-3.myhuaweicloud.com/meadow/l3mvn:base-v250830
+        command:
+          - /bin/bash
+          - '-c'
+        args:
+          - >-
+            source /root/anaconda3/bin/activate && conda activate L3MVN && cd
+            /app/data/z00562901/NavDataGeneration/ && python
+            NavTrajSampleGeneration/ShortestPath/objectnav_sp_gen_test.py
+            --traj_path {{workflow.parameters.traj_path}} --scene_name
+            {{inputs.parameters.scene_name}} --output_path
+            {{workflow.parameters.output_path}}
+        resources:
+          limits:
+            nvidia.com/gpu: '1'
+        volumeMounts:
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/
+            subPath: data-platform/NavDataGeneration/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/data/
+            subPath: data-platform/data/
+        source: ''
+  entrypoint: main
+  arguments:
+    parameters:
+      - name: traj_path
+        default: data/traj_datasets/objectnav/traj_test/train/content
+        description: 任务数据集路径
+      - name: output_path
+        default: data/traj_datasets/objectnav/traj_test/train/content
+        description: 生成轨迹数据集存放路径
+  volumes:
+    - name: volume-data-platform
+      persistentVolumeClaim:
+        claimName: pvc-data-platform
+  tolerations:
+    - key: workflows.argoproj.io/workflow-template
+      operator: Equal
+      value: traj-gen-SP
+      effect: NoExecute
+  imagePullSecrets:
+    - name: default-secret
+  priority: 1000
+  podPriorityClassName: high-1000
+  workflowMetadata:
+    annotations:
+      workflows.argoproj.io/description: '{{workflow.parameters.traj_path}}'

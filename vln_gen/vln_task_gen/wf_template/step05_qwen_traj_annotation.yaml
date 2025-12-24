@@ -1,0 +1,111 @@
+metadata:
+  name: step03-qwen-traj-annotation-batch
+  namespace: argo
+  uid: afe25402-3991-4be8-96ab-f205842410dd
+  resourceVersion: '77334386'
+  generation: 17
+  creationTimestamp: '2025-12-08T02:48:20Z'
+  labels:
+    workflows.argoproj.io/creator: system-serviceaccount-argo-jenkins
+  managedFields:
+    - manager: argo
+      operation: Update
+      apiVersion: argoproj.io/v1alpha1
+      time: '2025-12-17T04:50:55Z'
+      fieldsType: FieldsV1
+      fieldsV1:
+        f:metadata:
+          f:labels:
+            .: {}
+            f:workflows.argoproj.io/creator: {}
+        f:spec: {}
+spec:
+  templates:
+    - name: step03-remote-gemini-traj-annotation
+      inputs: {}
+      outputs: {}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: cce.cloud.com/cce-nodepool
+                    operator: In
+                    values:
+                      - cce-z00562901-wf-nodepool-cpu-8u16g
+      metadata: {}
+      script:
+        name: ''
+        image: swr.cn-east-3.myhuaweicloud.com/meadow/habitat:ssh-qwen
+        command:
+          - /bin/bash
+          - '-c'
+        args:
+          - >-
+            cd /app/data/z00562901/NavDataGeneration/ && python3
+            obj2vln/obj2vln/step03_qwen_traj_annotation_batch.py --vln_topo_path
+            {{workflow.parameters.vln_topo_path}}  --debug
+            {{workflow.parameters.debug}} --api_key
+            {{workflow.parameters.api_key}}  --episode_range
+            {{workflow.parameters.episode_range}}
+        resources:
+          limits:
+            cpu: '2'
+            memory: 4Gi
+          requests:
+            cpu: '2'
+            memory: 4Gi
+        volumeMounts:
+          - name: volume-data-platform
+            mountPath: >-
+              /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/data/
+            subPath: data-platform/data/
+          - name: volume-data-platform
+            mountPath: >-
+              /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/model/
+            subPath: data-platform/model/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/data/
+            subPath: data-platform/data/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/model/
+            subPath: data-platform/model/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/
+            subPath: data-platform/NavDataGeneration/
+        source: ''
+      retryStrategy:
+        limit: '10'
+  entrypoint: step03-remote-gemini-traj-annotation
+  arguments:
+    parameters:
+      - name: vln_topo_path
+        default: >-
+          data/task_datasets/vln/hm3d_v2_l3mvn_refine_v2_1/train/content/episode_num_3100-3199
+        description: vln轨迹数据集路径
+      - name: api_key
+        enum:
+          - sk-xxxxxx
+        description: qwen api key
+      - name: episode_range
+        default: 3100-3199
+        description: 最多处理的episode
+      - name: debug
+        default: 'False'
+        description: debug模式
+  volumes:
+    - name: volume-data-platform
+      persistentVolumeClaim:
+        claimName: pvc-data-platform
+  tolerations:
+    - key: workflows.argoproj.io/workflow-template
+      operator: Equal
+      value: traj-replay
+      effect: NoExecute
+  imagePullSecrets:
+    - name: default-secret
+  priority: 1000
+  podPriorityClassName: high-1000
+  workflowMetadata:
+    annotations:
+      workflows.argoproj.io/description: '{{workflow.parameters.episode_range}}  {{workflow.parameters.api_key}}'

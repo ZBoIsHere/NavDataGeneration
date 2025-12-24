@@ -1,0 +1,113 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: gen-topo-img
+  namespace: argo
+spec:
+  entrypoint: entry-gen-topo-img
+  arguments:
+    parameters:
+      - name: objnav_input_path
+        default: "data/traj_datasets/objectnav/hm3d_v2/train/content/episode_num_3100-3199"
+        description: objectnav轨迹数据集路径
+      - name: vln_topo_path
+        default: "data/task_datasets/vln/hm3d_v2_l3mvn_refine_v2_1/train/content/episode_num_3100-3199"
+        description: vln轨迹数据集路径
+      - name: debug
+        default: "False"
+        description: debug模式
+      - name: episode_range
+        default: "3100-3199"
+        description: 处理的episode范围
+      - name: max_scene
+        default: "1000"
+        description: 最多处理的场景
+  volumes:
+    - name: volume-data-platform
+      persistentVolumeClaim:
+        claimName: pvc-data-platform
+  tolerations:
+    - key: workflows.argoproj.io/workflow-template
+      operator: Equal
+      value: objnav2vln
+      effect: NoExecute
+  imagePullSecrets:
+    - name: default-secret
+  workflowMetadata:
+    annotations:
+      workflows.argoproj.io/description: "Generate topology images for scenes in range {{workflow.parameters.episode_range}}"
+  templates:
+    - name: entry-gen-topo-img
+      steps:
+        - - name: list-scene
+            template: list-scene
+        - - name: step02-gen-topo-img
+            template: step02-gen-topo-img
+            arguments:
+              parameters:
+                - name: scene_name
+                  value: "{{item}}"
+            withParam: "{{steps.list-scene.outputs.result}}"
+
+    - name: list-scene
+      script:
+        image: swr.cn-east-3.myhuaweicloud.com/meadow/l3mvn:base-v250830
+        command: [python]
+        workingDir: /app/data/z00562901/NavDataGeneration/
+        volumeMounts:
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/data/
+            subPath: data-platform/data/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/model/
+            subPath: data-platform/model/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/data/
+            subPath: data-platform/data/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/model/
+            subPath: data-platform/model/
+        source: |
+          import os, json, random
+          directory = "{{workflow.parameters.objnav_input_path}}"
+          files = [os.path.splitext(os.path.splitext(f)[0])[0] 
+                  for f in os.listdir(directory) if f.endswith(".json.gz")]
+          max_scene = int({{workflow.parameters.max_scene}})
+          files = random.sample(files, min(len(files), max_scene))
+          print(json.dumps(files))
+
+    - name: step02-gen-topo-img
+      inputs:
+        parameters:
+          - name: scene_name
+      script:
+        image: swr.cn-east-3.myhuaweicloud.com/meadow/l3mvn:base-v250830
+        command: [/bin/bash, "-c"]
+        args:
+          - >
+            source /root/anaconda3/bin/activate && conda activate L3MVN && 
+            cd /app/data/z00562901/NavDataGeneration/ && 
+            python obj2vln/obj2vln/step02_gen_topo_img.py 
+            --scene_name {{inputs.parameters.scene_name}} 
+            --vln_topo_path {{workflow.parameters.vln_topo_path}} 
+            --debug {{workflow.parameters.debug}} 
+            --episode_range {{workflow.parameters.episode_range}}
+        resources:
+          limits:
+            nvidia.com/gpu: "1"
+        volumeMounts:
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/data/
+            subPath: data-platform/data/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/NavTrajSampleGeneration/L3MVN/model/
+            subPath: data-platform/model/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/data/
+            subPath: data-platform/data/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/model/
+            subPath: data-platform/model/
+          - name: volume-data-platform
+            mountPath: /app/data/z00562901/NavDataGeneration/
+            subPath: data-platform/NavDataGeneration/
